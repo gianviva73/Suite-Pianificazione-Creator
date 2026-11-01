@@ -1,0 +1,1105 @@
+<!DOCTYPE html>
+<html lang="it" class="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Planner & Productivity Suite Freelance</title>
+  
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- React & ReactDOM (Production CDN) -->
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+
+  <!-- Babel for JS syntax support in single-file -->
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <!-- Lucide Icons CDN -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  
+  <style>
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #f1f5f9;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #cbd5e1;
+      border-radius: 4px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #94a3b8;
+    }
+    .glass-card {
+      background: rgba(255, 255, 255, 0.95);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(226, 232, 240, 0.9);
+    }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-900 font-sans antialiased selection:bg-emerald-500 selection:text-white">
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect, useMemo } = React;
+
+    const Icon = ({ name, className = "w-5 h-5" }) => {
+      useEffect(() => {
+        if (window.lucide) {
+          window.lucide.createIcons();
+        }
+      }, [name]);
+
+      return <i data-lucide={name} className={className}></i>;
+    };
+
+    const playBeep = (freq = 587.33, duration = 0.25, type = 'sine') => {
+      try {
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = type;
+        osc.frequency.value = freq;
+        gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start();
+        osc.stop(audioCtx.currentTime + duration);
+      } catch (e) {
+        console.warn("Audio Context sound error:", e);
+      }
+    };
+
+    const DAYS = ['Lunedì', 'Martedì', 'Mercoledì', 'Giovedì', 'Venerdì', 'Sabato', 'Domenica'];
+
+    const STATUS_CONFIG = {
+      bozza: { label: 'Bozza', bg: 'bg-amber-50 text-amber-800 border-amber-200', badge: 'bg-amber-500' },
+      produzione: { label: 'In Produzione', bg: 'bg-indigo-50 text-indigo-800 border-indigo-200', badge: 'bg-indigo-500' },
+      pronto: { label: 'Pronto / Programmato', bg: 'bg-cyan-50 text-cyan-800 border-cyan-200', badge: 'bg-cyan-500' },
+      pubblicato: { label: 'Pubblicato', bg: 'bg-emerald-50 text-emerald-800 border-emerald-200', badge: 'bg-emerald-500' }
+    };
+
+    const CHANNELS = [
+      { id: 'instagram', name: 'Instagram', color: 'text-pink-600' },
+      { id: 'linkedin', name: 'LinkedIn', color: 'text-blue-600' },
+      { id: 'youtube', name: 'YouTube', color: 'text-red-600' },
+      { id: 'tiktok', name: 'TikTok', color: 'text-slate-800' },
+      { id: 'blog', name: 'Blog / Newsletter', color: 'text-emerald-700' },
+    ];
+
+    function App() {
+      const [activeTab, setActiveTab] = useState('planner');
+      const [showGuideModal, setShowGuideModal] = useState(false);
+      
+      const [tasks, setTasks] = useState(() => {
+        try {
+          const saved = localStorage.getItem('freelance_weekly_tasks');
+          return saved ? JSON.parse(saved) : [
+            { id: 't1', day: 'Lunedì', title: 'Invio preventivo cliente Acme Srl', category: 'Clienti', completed: true, priority: 'alta' },
+            { id: 't2', day: 'Lunedì', title: 'Review settimanale obiettivi', category: 'Strategia', completed: false, priority: 'media' },
+            { id: 't3', day: 'Martedì', title: 'Registrazione Reel Instagram tutorial', category: 'Marketing', completed: false, priority: 'alta' },
+            { id: 't4', day: 'Mercoledì', title: 'Fatturazione fine mese e solleciti', category: 'Finanze', completed: false, priority: 'alta' },
+            { id: 't5', day: 'Giovedì', title: 'Aggiornamento librerie e backup codice', category: 'Dev', completed: false, priority: 'bassa' },
+            { id: 't6', day: 'Venerdì', title: 'Call Allineamento Progetto E-commerce', category: 'Clienti', completed: false, priority: 'media' },
+          ];
+        } catch(e) {
+          return [];
+        }
+      });
+
+      const [editorialPosts, setEditorialPosts] = useState(() => {
+        try {
+          const saved = localStorage.getItem('freelance_editorial_posts');
+          return saved ? JSON.parse(saved) : [
+            { id: 'p1', title: '5 Errori nel calcolo della tariffa oraria freelance', channel: 'instagram', status: 'pronto', date: '2026-11-05', format: 'Carousel Reel' },
+            { id: 'p2', title: 'Case study: Come ho ottimizzato un e-commerce +300%', channel: 'linkedin', status: 'produzione', date: '2026-11-08', format: 'Post Lungo' },
+            { id: 'p3', title: 'Guida completa a React 19 per sviluppatori', channel: 'youtube', status: 'bozza', date: '2026-11-12', format: 'Video Longform' },
+            { id: 'p4', title: 'Perché dovresti automatizzare i tuoi preventivi', channel: 'blog', status: 'pubblicato', date: '2026-10-28', format: 'Articolo Blog' }
+          ];
+        } catch(e) {
+          return [];
+        }
+      });
+
+      const [quickNotes, setQuickNotes] = useState(() => {
+        try {
+          return localStorage.getItem('freelance_pomodoro_notes') || "• Ricordarsi di inviare la bozza grafica a Marco\n• Idea per post: confronto Forfettario vs Ordinario\n• Controllare scadenze domini web";
+        } catch(e) {
+          return "";
+        }
+      });
+
+      // Creator Utilities State
+      const [captionText, setCaptionText] = useState('');
+      const [captionPreset, setCaptionPreset] = useState('instagram');
+      
+      const PRESETS_LIMITS = {
+        instagram: { name: 'Instagram Caption (Max 2200)', max: 2200, optimal: 300 },
+        tiktok: { name: 'TikTok Caption (Max 2200)', max: 2200, optimal: 150 },
+        youtube: { name: 'YouTube Title (Max 100)', max: 100, optimal: 60 },
+        linkedin: { name: 'LinkedIn Post (Max 3000)', max: 3000, optimal: 1300 }
+      };
+
+      const [currentPalette, setCurrentPalette] = useState(['#059669', '#10b981', '#34d399', '#0284c7', '#0f172a']);
+      const [copiedColor, setCopiedColor] = useState(null);
+
+      const generateRandomPalette = () => {
+        const letters = '0123456789ABCDEF';
+        const getRandomColor = () => {
+          let color = '#';
+          for (let i = 0; i < 6; i++) {
+            color += letters[Math.floor(Math.random() * 16)];
+          }
+          return color;
+        };
+        setCurrentPalette([getRandomColor(), getRandomColor(), getRandomColor(), getRandomColor(), getRandomColor()]);
+      };
+
+      const copyHexCode = (hex) => {
+        try {
+          const textarea = document.createElement('textarea');
+          textarea.value = hex;
+          textarea.style.position = 'fixed';
+          textarea.style.left = '-999999px';
+          document.body.appendChild(textarea);
+          textarea.select();
+          document.execCommand('copy');
+          document.body.removeChild(textarea);
+          setCopiedColor(hex);
+          setTimeout(() => setCopiedColor(null), 2000);
+        } catch (e) {
+          console.error("Copia esadecimale fallita", e);
+        }
+      };
+
+      const [erViews, setErViews] = useState(10000);
+      const [erLikes, setErLikes] = useState(650);
+      const [erComments, setErComments] = useState(45);
+      const [erShares, setErShares] = useState(30);
+
+      const calculatedEngagementRate = useMemo(() => {
+        const views = Number(erViews) || 1;
+        const totalInteractions = (Number(erLikes) || 0) + (Number(erComments) || 0) + (Number(erShares) || 0);
+        const rate = (totalInteractions / views) * 100;
+        return rate.toFixed(2);
+      }, [erViews, erLikes, erComments, erShares]);
+
+      // Pomodoro Timer State
+      const [pomodoroMode, setPomodoroMode] = useState('work');
+      const [timeLeft, setTimeLeft] = useState(25 * 60);
+      const [isRunning, setIsRunning] = useState(false);
+      const [pomodoroCount, setPomodoroCount] = useState(0);
+
+      useEffect(() => {
+        let timer = null;
+        if (isRunning && timeLeft > 0) {
+          timer = setInterval(() => {
+            setTimeLeft(prev => prev - 1);
+          }, 1000);
+        } else if (timeLeft === 0 && isRunning) {
+          setIsRunning(false);
+          playBeep(880, 0.4);
+          if (pomodoroMode === 'work') {
+            setPomodoroCount(c => c + 1);
+          }
+        }
+        return () => clearInterval(timer);
+      }, [isRunning, timeLeft, pomodoroMode]);
+
+      const switchPomodoroMode = (mode) => {
+        setIsRunning(false);
+        setPomodoroMode(mode);
+        if (mode === 'work') setTimeLeft(25 * 60);
+        if (mode === 'shortBreak') setTimeLeft(5 * 60);
+        if (mode === 'longBreak') setTimeLeft(15 * 60);
+      };
+
+      const formatTime = (seconds) => {
+        const mins = Math.floor(seconds / 60);
+        const secs = seconds % 60;
+        return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+      };
+
+      // Planner state handlers
+      const [newTaskTitle, setNewTaskTitle] = useState('');
+      const [newTaskDay, setNewTaskDay] = useState('Lunedì');
+      const [newTaskCategory, setNewTaskCategory] = useState('Clienti');
+      const [newTaskPriority, setNewTaskPriority] = useState('media');
+
+      const handleAddTask = (e) => {
+        if (e && e.preventDefault) e.preventDefault();
+        if (!newTaskTitle.trim()) return;
+        const newItem = {
+          id: Date.now().toString(),
+          day: newTaskDay,
+          title: newTaskTitle.trim(),
+          category: newTaskCategory.trim() || 'Generale',
+          completed: false,
+          priority: newTaskPriority
+        };
+        setTasks(prev => [...prev, newItem]);
+        setNewTaskTitle('');
+      };
+
+      const toggleTaskCompletion = (id) => {
+        setTasks(tasks.map(t => t.id === id ? { ...t, completed: !t.completed } : t));
+      };
+
+      const deleteTask = (id) => {
+        setTasks(tasks.filter(t => t.id !== id));
+      };
+
+      const completionPercentage = useMemo(() => {
+        if (tasks.length === 0) return 0;
+        const completedCount = tasks.filter(t => t.completed).length;
+        return Math.round((completedCount / tasks.length) * 100);
+      }, [tasks]);
+
+      // Editorial Post handlers
+      const [newPostTitle, setNewPostTitle] = useState('');
+      const [newPostChannel, setNewPostChannel] = useState('instagram');
+      const [newPostStatus, setNewPostStatus] = useState('bozza');
+      const [newPostDate, setNewPostDate] = useState(new Date().toISOString().split('T')[0]);
+      const [newPostFormat, setNewPostFormat] = useState('Reel');
+
+      const handleAddPost = (e) => {
+        if (e && e.preventDefault) e.preventDefault();
+        if (!newPostTitle.trim()) return;
+        const newPost = {
+          id: Date.now().toString(),
+          title: newPostTitle.trim(),
+          channel: newPostChannel,
+          status: newPostStatus,
+          date: newPostDate,
+          format: newPostFormat.trim() || 'Post'
+        };
+        setEditorialPosts(prev => [...prev, newPost]);
+        setNewPostTitle('');
+      };
+
+      const updatePostStatus = (id, newStatus) => {
+        setEditorialPosts(editorialPosts.map(p => p.id === id ? { ...p, status: newStatus } : p));
+      };
+
+      const deletePost = (id) => {
+        setEditorialPosts(editorialPosts.filter(p => p.id !== id));
+      };
+
+      useEffect(() => {
+        try {
+          localStorage.setItem('freelance_weekly_tasks', JSON.stringify(tasks));
+        } catch(e) {}
+      }, [tasks]);
+
+      useEffect(() => {
+        try {
+          localStorage.setItem('freelance_editorial_posts', JSON.stringify(editorialPosts));
+        } catch(e) {}
+      }, [editorialPosts]);
+
+      useEffect(() => {
+        try {
+          localStorage.setItem('freelance_pomodoro_notes', quickNotes);
+        } catch(e) {}
+      }, [quickNotes]);
+
+      useEffect(() => {
+        if (window.lucide) {
+          window.lucide.createIcons();
+        }
+      }, [activeTab, tasks, editorialPosts, showGuideModal, currentPalette]);
+
+      const downloadFileHtml = () => {
+        const htmlContent = document.documentElement.outerHTML;
+        const blob = new Blob([htmlContent], { type: 'text/html;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'FreelancePlannerSuite.html';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      };
+
+      return (
+        <div className="min-h-screen p-3 sm:p-6 md:p-8 max-w-7xl mx-auto space-y-8">
+          
+          {/* Header */}
+          <header className="glass-card rounded-3xl p-6 sm:p-8 shadow-xl border border-slate-200 relative overflow-hidden">
+            <div className="absolute -right-10 -top-10 w-48 h-48 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none"></div>
+
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 relative z-10">
+              <div>
+                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-bold uppercase tracking-wider mb-3">
+                  <Icon name="sparkles" className="w-3.5 h-3.5" />
+                  Utility per Content Creator & Freelance
+                </div>
+                <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-slate-900">
+                  Suite Pianificazione & Creator
+                </h1>
+                <p className="text-slate-600 text-sm mt-1 max-w-xl">
+                  Agenda settimanale, piano editoriale, Pomodoro timer e strumenti dedicati ai content creator in un unico file offline.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-3 flex-wrap">
+                <button
+                  type="button"
+                  onClick={() => setShowGuideModal(true)}
+                  className="inline-flex items-center gap-2 bg-white hover:bg-slate-100 text-slate-800 border border-slate-300 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all shadow-sm cursor-pointer"
+                >
+                  <Icon name="book-open" className="w-4 h-4 text-emerald-600" />
+                  <span>Guida all'Uso</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={downloadFileHtml}
+                  className="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white px-5 py-2.5 rounded-xl text-sm font-bold transition-all shadow-lg shadow-emerald-600/30 cursor-pointer"
+                >
+                  <Icon name="download" className="w-4 h-4" />
+                  <span>Scarica File HTML</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Navigation Tabs */}
+            <div className="flex gap-2 mt-6 overflow-x-auto pb-1 scrollbar-none border-t border-slate-200 pt-4">
+              <button
+                type="button"
+                onClick={() => setActiveTab('planner')}
+                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all whitespace-nowrap cursor-pointer ${
+                  activeTab === 'planner'
+                    ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-600/30'
+                    : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-200'
+                }`}
+              >
+                <Icon name="calendar-days" className="w-4 h-4" />
+                1. Planner & Checklist
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setActiveTab('editorial')}
+                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all whitespace-nowrap cursor-pointer ${
+                  activeTab === 'editorial'
+                    ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-600/30'
+                    : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-200'
+                }`}
+              >
+                <Icon name="video" className="w-4 h-4" />
+                2. Piano Editoriale
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setActiveTab('pomodoro')}
+                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all whitespace-nowrap cursor-pointer ${
+                  activeTab === 'pomodoro'
+                    ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-600/30'
+                    : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-200'
+                }`}
+              >
+                <Icon name="timer" className="w-4 h-4" />
+                3. Pomodoro Timer
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setActiveTab('creator')}
+                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all whitespace-nowrap cursor-pointer ${
+                  activeTab === 'creator'
+                    ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-600/30'
+                    : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-200'
+                }`}
+              >
+                <Icon name="wand-2" className="w-4 h-4" />
+                4. Utility per Content Creator
+              </button>
+            </div>
+          </header>
+
+          {/* MAIN CONTENT AREA */}
+          <main>
+
+            {/* TAB 1: WEEKLY PLANNER */}
+            {activeTab === 'planner' && (
+              <div className="space-y-6">
+                
+                {/* Top Banner Progress */}
+                <div className="glass-card rounded-2xl p-5 border border-slate-200 flex flex-col md:flex-row items-center justify-between gap-4 shadow-sm">
+                  <div className="space-y-1">
+                    <div className="text-xs uppercase font-bold tracking-wider text-emerald-600">Progresso Settimanale</div>
+                    <div className="text-xl font-extrabold text-slate-900">
+                      {tasks.filter(t => t.completed).length} di {tasks.length} task completate ({completionPercentage}%)
+                    </div>
+                  </div>
+                  
+                  <div className="w-full md:w-72 bg-slate-200 rounded-full h-3 overflow-hidden">
+                    <div style={{ width: `${completionPercentage}%` }} className="bg-emerald-600 h-full transition-all duration-500 rounded-full"></div>
+                  </div>
+                </div>
+
+                {/* Task Creator Form */}
+                <div className="glass-card rounded-2xl p-5 border border-slate-200 grid grid-cols-1 sm:grid-cols-12 gap-3 shadow-sm">
+                  <div className="sm:col-span-4">
+                    <input
+                      type="text"
+                      value={newTaskTitle}
+                      onChange={(e) => setNewTaskTitle(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === 'Enter') handleAddTask(e); }}
+                      placeholder="Nuova task o attività..."
+                      className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-emerald-500"
+                    />
+                  </div>
+
+                  <div className="sm:col-span-2">
+                    <select
+                      value={newTaskDay}
+                      onChange={(e) => setNewTaskDay(e.target.value)}
+                      className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-none cursor-pointer"
+                    >
+                      {DAYS.map(d => <option key={d} value={d}>{d}</option>)}
+                    </select>
+                  </div>
+
+                  <div className="sm:col-span-2">
+                    <input
+                      type="text"
+                      value={newTaskCategory}
+                      onChange={(e) => setNewTaskCategory(e.target.value)}
+                      placeholder="Categoria (es. Clienti)"
+                      className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-none"
+                    />
+                  </div>
+
+                  <div className="sm:col-span-2">
+                    <select
+                      value={newTaskPriority}
+                      onChange={(e) => setNewTaskPriority(e.target.value)}
+                      className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-none cursor-pointer"
+                    >
+                      <option value="alta">Priorità Alta</option>
+                      <option value="media">Priorità Media</option>
+                      <option value="bassa">Priorità Bassa</option>
+                    </select>
+                  </div>
+
+                  <div className="sm:col-span-2">
+                    <button
+                      type="button"
+                      onClick={(e) => handleAddTask(e)}
+                      className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs py-2.5 rounded-xl transition shadow-md shadow-emerald-600/20 flex items-center justify-center gap-1.5 cursor-pointer active:scale-95"
+                    >
+                      <Icon name="plus" className="w-4 h-4" />
+                      Aggiungi
+                    </button>
+                  </div>
+                </div>
+
+                {/* Days Columns Grid */}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                  {DAYS.slice(0, 4).map(day => {
+                    const dayTasks = tasks.filter(t => t.day === day);
+                    return (
+                      <div key={day} className="glass-card rounded-2xl p-4 border border-slate-200 space-y-3 shadow-sm flex flex-col justify-between">
+                        <div>
+                          <div className="flex items-center justify-between border-b border-slate-200 pb-2 mb-3">
+                            <h3 className="text-sm font-bold text-slate-900">{day}</h3>
+                            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">
+                              {dayTasks.length} task
+                            </span>
+                          </div>
+
+                          <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+                            {dayTasks.length === 0 ? (
+                              <p className="text-[11px] text-slate-400 italic py-2">Nessuna task per questo giorno.</p>
+                            ) : (
+                              dayTasks.map(task => (
+                                <div key={task.id} className={`p-2.5 rounded-xl border transition flex items-start gap-2.5 ${task.completed ? 'bg-slate-50 border-slate-200 opacity-60 line-through' : 'bg-white border-slate-200 shadow-sm'}`}>
+                                  <input
+                                    type="checkbox"
+                                    checked={task.completed}
+                                    onChange={() => toggleTaskCompletion(task.id)}
+                                    className="mt-0.5 accent-emerald-600 cursor-pointer"
+                                  />
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-xs text-slate-900 font-medium break-words">{task.title}</p>
+                                    <div className="flex items-center gap-2 mt-1">
+                                      <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 font-semibold">{task.category}</span>
+                                      <span className={`text-[9px] font-semibold ${task.priority === 'alta' ? 'text-rose-600' : task.priority === 'media' ? 'text-amber-600' : 'text-slate-500'}`}>
+                                        {task.priority}
+                                      </span>
+                                    </div>
+                                  </div>
+                                  <button type="button" onClick={() => deleteTask(task.id)} className="text-slate-400 hover:text-rose-600 transition cursor-pointer">
+                                    <Icon name="trash-2" className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              ))
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {DAYS.slice(4).map(day => {
+                    const dayTasks = tasks.filter(t => t.day === day);
+                    return (
+                      <div key={day} className="glass-card rounded-2xl p-4 border border-slate-200 space-y-3 shadow-sm flex flex-col justify-between">
+                        <div>
+                          <div className="flex items-center justify-between border-b border-slate-200 pb-2 mb-3">
+                            <h3 className="text-sm font-bold text-slate-900">{day}</h3>
+                            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">
+                              {dayTasks.length} task
+                            </span>
+                          </div>
+
+                          <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+                            {dayTasks.length === 0 ? (
+                              <p className="text-[11px] text-slate-400 italic py-2">Nessuna task per questo giorno.</p>
+                            ) : (
+                              dayTasks.map(task => (
+                                <div key={task.id} className={`p-2.5 rounded-xl border transition flex items-start gap-2.5 ${task.completed ? 'bg-slate-50 border-slate-200 opacity-60 line-through' : 'bg-white border-slate-200 shadow-sm'}`}>
+                                  <input
+                                    type="checkbox"
+                                    checked={task.completed}
+                                    onChange={() => toggleTaskCompletion(task.id)}
+                                    className="mt-0.5 accent-emerald-600 cursor-pointer"
+                                  />
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-xs text-slate-900 font-medium break-words">{task.title}</p>
+                                    <div className="flex items-center gap-2 mt-1">
+                                      <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 font-semibold">{task.category}</span>
+                                      <span className={`text-[9px] font-semibold ${task.priority === 'alta' ? 'text-rose-600' : task.priority === 'media' ? 'text-amber-600' : 'text-slate-500'}`}>
+                                        {task.priority}
+                                      </span>
+                                    </div>
+                                  </div>
+                                  <button type="button" onClick={() => deleteTask(task.id)} className="text-slate-400 hover:text-rose-600 transition cursor-pointer">
+                                    <Icon name="trash-2" className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              ))
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+              </div>
+            )}
+
+            {/* TAB 2: EDITORIAL BOARD */}
+            {activeTab === 'editorial' && (
+              <div className="space-y-6">
+                
+                {/* Add Post Form */}
+                <div className="glass-card rounded-2xl p-5 border border-slate-200 grid grid-cols-1 sm:grid-cols-12 gap-3 shadow-sm">
+                  <div className="sm:col-span-3">
+                    <input
+                      type="text"
+                      value={newPostTitle}
+                      onChange={(e) => setNewPostTitle(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === 'Enter') handleAddPost(e); }}
+                      placeholder="Titolo / Argomento Contenuto..."
+                      className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-none"
+                    />
+                  </div>
+
+                  <div className="sm:col-span-2">
+                    <select
+                      value={newPostChannel}
+                      onChange={(e) => setNewPostChannel(e.target.value)}
+                      className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-none cursor-pointer"
+                    >
+                      {CHANNELS.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                    </select>
+                  </div>
+
+                  <div className="sm:col-span-2">
+                    <select
+                      value={newPostStatus}
+                      onChange={(e) => setNewPostStatus(e.target.value)}
+                      className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-none cursor-pointer"
+                    >
+                      <option value="bozza">Bozza</option>
+                      <option value="produzione">In Produzione</option>
+                      <option value="pronto">Pronto</option>
+                      <option value="pubblicato">Pubblicato</option>
+                    </select>
+                  </div>
+
+                  <div className="sm:col-span-2">
+                    <input
+                      type="date"
+                      value={newPostDate}
+                      onChange={(e) => setNewPostDate(e.target.value)}
+                      className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-none"
+                    />
+                  </div>
+
+                  <div className="sm:col-span-1">
+                    <input
+                      type="text"
+                      value={newPostFormat}
+                      onChange={(e) => setNewPostFormat(e.target.value)}
+                      placeholder="Formato"
+                      className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-none"
+                    />
+                  </div>
+
+                  <div className="sm:col-span-2">
+                    <button
+                      type="button"
+                      onClick={(e) => handleAddPost(e)}
+                      className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs py-2.5 rounded-xl transition shadow-md shadow-emerald-600/20 flex items-center justify-center gap-1.5 cursor-pointer active:scale-95"
+                    >
+                      <Icon name="plus" className="w-4 h-4" />
+                      Aggiungi Post
+                    </button>
+                  </div>
+                </div>
+
+                {/* Kanban Columns */}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                  {Object.entries(STATUS_CONFIG).map(([statusCode, statusInfo]) => {
+                    const colPosts = editorialPosts.filter(p => p.status === statusCode);
+                    return (
+                      <div key={statusCode} className="glass-card rounded-2xl p-4 border border-slate-200 space-y-3 shadow-sm flex flex-col justify-between">
+                        <div>
+                          <div className="flex items-center justify-between border-b border-slate-200 pb-2 mb-3">
+                            <span className={`text-xs font-bold px-2.5 py-0.5 rounded-full border ${statusInfo.bg}`}>
+                              {statusInfo.label}
+                            </span>
+                            <span className="text-xs font-semibold text-slate-500">{colPosts.length}</span>
+                          </div>
+
+                          <div className="space-y-3 max-h-96 overflow-y-auto pr-1">
+                            {colPosts.length === 0 ? (
+                              <p className="text-[11px] text-slate-400 italic py-2">Nessun contenuto qui.</p>
+                            ) : (
+                              colPosts.map(post => {
+                                const chan = CHANNELS.find(c => c.id === post.channel) || CHANNELS[0];
+                                return (
+                                  <div key={post.id} className="bg-white border border-slate-200 rounded-xl p-3 space-y-2 shadow-sm">
+                                    <div className="flex items-center justify-between">
+                                      <span className={`text-[10px] font-bold uppercase ${chan.color}`}>{chan.name}</span>
+                                      <span className="text-[10px] text-slate-400">{post.date}</span>
+                                    </div>
+                                    <p className="text-xs font-semibold text-slate-900">{post.title}</p>
+                                    <div className="flex items-center justify-between pt-1 border-t border-slate-100">
+                                      <span className="text-[9px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 font-medium">{post.format}</span>
+                                      
+                                      <div className="flex items-center gap-1">
+                                        <select
+                                          value={post.status}
+                                          onChange={(e) => updatePostStatus(post.id, e.target.value)}
+                                          className="text-[10px] bg-slate-100 border border-slate-200 rounded px-1.5 py-0.5 text-slate-700 cursor-pointer"
+                                        >
+                                          <option value="bozza">Bozza</option>
+                                          <option value="produzione">Produzione</option>
+                                          <option value="pronto">Pronto</option>
+                                          <option value="pubblicato">Pubblicato</option>
+                                        </select>
+                                        <button type="button" onClick={() => deletePost(post.id)} className="text-slate-400 hover:text-rose-600 p-0.5 cursor-pointer">
+                                          <Icon name="trash-2" className="w-3 h-3" />
+                                        </button>
+                                      </div>
+                                    </div>
+                                  </div>
+                                );
+                              })
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+              </div>
+            )}
+
+            {/* TAB 3: POMODORO TIMER */}
+            {activeTab === 'pomodoro' && (
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+                
+                {/* Pomodoro Timer Card (7 cols) */}
+                <div className="lg:col-span-7 glass-card rounded-3xl p-6 sm:p-8 border border-slate-200 space-y-6 text-center shadow-xl">
+                  <div className="flex items-center justify-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => switchPomodoroMode('work')}
+                      className={`px-4 py-2 rounded-xl text-xs font-bold transition cursor-pointer ${pomodoroMode === 'work' ? 'bg-emerald-600 text-white shadow-md' : 'bg-white text-slate-700 border border-slate-200'}`}
+                    >
+                      Lavoro (25m)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => switchPomodoroMode('shortBreak')}
+                      className={`px-4 py-2 rounded-xl text-xs font-bold transition cursor-pointer ${pomodoroMode === 'shortBreak' ? 'bg-emerald-600 text-white shadow-md' : 'bg-white text-slate-700 border border-slate-200'}`}
+                    >
+                      Pausa Breve (5m)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => switchPomodoroMode('longBreak')}
+                      className={`px-4 py-2 rounded-xl text-xs font-bold transition cursor-pointer ${pomodoroMode === 'longBreak' ? 'bg-emerald-600 text-white shadow-md' : 'bg-white text-slate-700 border border-slate-200'}`}
+                    >
+                      Pausa Lunga (15m)
+                    </button>
+                  </div>
+
+                  {/* Big Circular Display */}
+                  <div className="py-8">
+                    <div className="text-6xl sm:text-7xl font-extrabold text-slate-900 tracking-tight font-mono">
+                      {formatTime(timeLeft)}
+                    </div>
+                    <p className="text-xs text-slate-500 mt-2">
+                      Sessioni completate oggi: <span className="font-bold text-emerald-600">{pomodoroCount}</span>
+                    </p>
+                  </div>
+
+                  {/* Controls */}
+                  <div className="flex justify-center items-center gap-4">
+                    <button
+                      type="button"
+                      onClick={() => setIsRunning(!isRunning)}
+                      className={`px-8 py-3.5 rounded-2xl text-sm font-bold text-white transition shadow-lg cursor-pointer active:scale-95 ${
+                        isRunning 
+                          ? 'bg-amber-600 hover:bg-amber-500 shadow-amber-600/30' 
+                          : 'bg-emerald-600 hover:bg-emerald-500 shadow-emerald-600/30'
+                      }`}
+                    >
+                      {isRunning ? 'Pausa' : 'Avvia Sessione'}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => switchPomodoroMode(pomodoroMode)}
+                      className="px-5 py-3.5 rounded-2xl text-sm font-bold bg-white text-slate-700 border border-slate-300 hover:bg-slate-100 transition cursor-pointer"
+                    >
+                      Reset
+                    </button>
+                  </div>
+                </div>
+
+                {/* Scratchpad (5 cols) */}
+                <div className="lg:col-span-5 glass-card rounded-3xl p-6 border border-slate-200 space-y-4 shadow-xl">
+                  <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+                    <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                      <Icon name="edit-3" className="w-4 h-4 text-emerald-600" />
+                      Blocco Note Rapido (Scratchpad)
+                    </h3>
+                    <span className="text-[10px] text-slate-400 font-medium">Salvataggio Automatico</span>
+                  </div>
+
+                  <p className="text-xs text-slate-500">
+                    Annota qui idee veloci e distrazioni durante la sessione Pomodoro senza interrompere la concentrazione.
+                  </p>
+
+                  <textarea
+                    value={quickNotes}
+                    onChange={(e) => setQuickNotes(e.target.value)}
+                    placeholder="Scrivi qui i tuoi pensieri o le idee veloci..."
+                    className="w-full h-72 bg-white border border-slate-300 rounded-2xl p-4 text-xs text-slate-900 font-mono focus:outline-none focus:border-emerald-500 transition resize-none leading-relaxed"
+                  />
+
+                  <div className="flex justify-between items-center text-[11px] text-slate-500">
+                    <span>{quickNotes.length} caratteri</span>
+                    <button
+                      type="button"
+                      onClick={() => setQuickNotes('')}
+                      className="hover:text-rose-600 transition font-medium cursor-pointer"
+                    >
+                      Svuota Note
+                    </button>
+                  </div>
+                </div>
+
+              </div>
+            )}
+
+            {/* TAB 4: UTILITY PER CONTENT CREATOR */}
+            {activeTab === 'creator' && (
+              <div className="space-y-8">
+                
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                  
+                  {/* Tool 1: Contatore Caratteri */}
+                  <div className="glass-card rounded-3xl p-6 border border-slate-200 space-y-4 shadow-xl">
+                    <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+                      <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                        <Icon name="type" className="w-4 h-4 text-emerald-600" />
+                        Contatore Caratteri & Testo
+                      </h3>
+                      <select
+                        value={captionPreset}
+                        onChange={(e) => setCaptionPreset(e.target.value)}
+                        className="bg-white border border-slate-300 rounded-xl px-2.5 py-1 text-xs text-slate-800 font-medium focus:outline-none cursor-pointer"
+                      >
+                        {Object.entries(PRESETS_LIMITS).map(([k, p]) => (
+                          <option key={k} value={k}>{p.name}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <p className="text-xs text-slate-500">
+                      Incolla o scrivi la tua caption per verificare il conteggio dei caratteri, parole e il limite consigliato.
+                    </p>
+
+                    <textarea
+                      value={captionText}
+                      onChange={(e) => setCaptionText(e.target.value)}
+                      placeholder="Scrivi qui la caption del post..."
+                      className="w-full h-40 bg-white border border-slate-300 rounded-2xl p-4 text-xs text-slate-900 focus:outline-none focus:border-emerald-500 transition resize-none leading-relaxed"
+                    />
+
+                    <div className="grid grid-cols-3 gap-3 pt-2">
+                      <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 text-center">
+                        <div className="text-[11px] text-slate-500">Caratteri</div>
+                        <div className={`text-lg font-bold mt-0.5 ${captionText.length > PRESETS_LIMITS[captionPreset].max ? 'text-rose-600' : 'text-slate-900'}`}>
+                          {captionText.length} <span className="text-xs text-slate-400 font-normal">/ {PRESETS_LIMITS[captionPreset].max}</span>
+                        </div>
+                      </div>
+
+                      <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 text-center">
+                        <div className="text-[11px] text-slate-500">Parole</div>
+                        <div className="text-lg font-bold text-slate-900 mt-0.5">
+                          {captionText.trim() ? captionText.trim().split(/\s+/).length : 0}
+                        </div>
+                      </div>
+
+                      <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 text-center">
+                        <div className="text-[11px] text-slate-500">Stato Limite</div>
+                        <div className={`text-xs font-bold mt-1.5 px-2 py-0.5 rounded-full inline-block ${
+                          captionText.length > PRESETS_LIMITS[captionPreset].max 
+                            ? 'bg-rose-100 text-rose-700' 
+                            : 'bg-emerald-100 text-emerald-700'
+                        }`}>
+                          {captionText.length > PRESETS_LIMITS[captionPreset].max ? 'Troncato!' : 'Perfetto'}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Tool 2: Engagement Rate */}
+                  <div className="glass-card rounded-3xl p-6 border border-slate-200 space-y-4 shadow-xl">
+                    <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+                      <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                        <Icon name="percent" className="w-4 h-4 text-emerald-600" />
+                        Calcolatore Engagement Rate (ER)
+                      </h3>
+                    </div>
+
+                    <p className="text-xs text-slate-500">
+                      Inserisci le metriche di visualizzazioni e interazioni del tuo post per calcolare la percentuale di interazione.
+                    </p>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-[11px] font-semibold text-slate-600 mb-1">Visualizzazioni (Views / Reach)</label>
+                        <input
+                          type="number"
+                          value={erViews}
+                          onChange={(e) => setErViews(e.target.value)}
+                          className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-none"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-[11px] font-semibold text-slate-600 mb-1">Mi Piace (Likes)</label>
+                        <input
+                          type="number"
+                          value={erLikes}
+                          onChange={(e) => setErLikes(e.target.value)}
+                          className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-none"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-[11px] font-semibold text-slate-600 mb-1">Commenti</label>
+                        <input
+                          type="number"
+                          value={erComments}
+                          onChange={(e) => setErComments(e.target.value)}
+                          className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-none"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-[11px] font-semibold text-slate-600 mb-1">Condivisioni / Salvataggi</label>
+                        <input
+                          type="number"
+                          value={erShares}
+                          onChange={(e) => setErShares(e.target.value)}
+                          className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-none"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-4 flex items-center justify-between">
+                      <div>
+                        <div className="text-xs text-emerald-800 font-medium">Engagement Rate Stimato</div>
+                        <div className="text-[11px] text-emerald-600 mt-0.5">(Likes + Commenti + Condivisioni) / Views</div>
+                      </div>
+                      <div className="text-3xl font-extrabold text-emerald-700">
+                        {calculatedEngagementRate}%
+                      </div>
+                    </div>
+                  </div>
+
+                </div>
+
+                {/* Tool 3: Palette Generator */}
+                <div className="glass-card rounded-3xl p-6 border border-slate-200 space-y-4 shadow-xl">
+                  <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+                    <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                      <Icon name="palette" className="w-4 h-4 text-emerald-600" />
+                      Generatore Palette Colori Armoniose (HEX)
+                    </h3>
+                    <button
+                      type="button"
+                      onClick={generateRandomPalette}
+                      className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs px-4 py-2 rounded-xl transition shadow-md shadow-emerald-600/20 flex items-center gap-1.5 cursor-pointer active:scale-95"
+                    >
+                      <Icon name="refresh-cw" className="w-3.5 h-3.5" />
+                      Genera Nuova Palette
+                    </button>
+                  </div>
+
+                  <p className="text-xs text-slate-500">
+                    Clicca su qualsiasi codice colore per copiarlo istantaneamente negli appunti per i tuoi design grafici e video.
+                  </p>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-5 gap-4 pt-2">
+                    {currentPalette.map((hex, idx) => (
+                      <div
+                        key={idx}
+                        onClick={() => copyHexCode(hex)}
+                        className="group relative bg-white border border-slate-200 rounded-2xl p-3 cursor-pointer shadow-sm hover:shadow-md transition text-center space-y-3"
+                      >
+                        <div 
+                          style={{ backgroundColor: hex }} 
+                          className="w-full h-24 rounded-xl border border-slate-200/50 shadow-inner"
+                        />
+                        <div className="font-mono font-bold text-xs text-slate-800">
+                          {hex}
+                        </div>
+                        <div className="text-[10px] text-emerald-600 font-semibold opacity-0 group-hover:opacity-100 transition">
+                          {copiedColor === hex ? 'Copiato!' : 'Copia HEX'}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+              </div>
+            )}
+
+          </main>
+
+          {/* User Guide Modal */}
+          {showGuideModal && (
+            <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4">
+              <div className="bg-white border border-slate-200 rounded-3xl max-w-2xl w-full p-6 md:p-8 space-y-6 shadow-2xl max-h-[90vh] overflow-y-auto animate-in zoom-in-95 duration-200">
+                <div className="flex justify-between items-center border-b border-slate-200 pb-4">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2.5 rounded-xl bg-emerald-50 text-emerald-600 border border-emerald-200">
+                      <Icon name="book-open" className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <h3 className="text-xl font-bold text-slate-900">Guida all'Uso della Suite</h3>
+                      <p className="text-xs text-slate-500">Tutte le funzioni per organizzare la tua attività freelance</p>
+                    </div>
+                  </div>
+                  <button 
+                    type="button"
+                    onClick={() => setShowGuideModal(false)}
+                    className="text-slate-400 hover:text-slate-700 p-2 rounded-lg bg-slate-100 transition cursor-pointer"
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                <div className="space-y-4 text-sm text-slate-700">
+                  <div className="space-y-1">
+                    <h4 className="font-bold text-slate-900 flex items-center gap-2">
+                      <span className="w-6 h-6 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center text-xs font-bold">1</span>
+                      Planner & Checklist Settimanale
+                    </h4>
+                    <p className="text-xs text-slate-600 pl-8">
+                      Organizza le attività dal lunedì alla domenica. Aggiungi task con priorità e categorie; i dati si salvano automaticamente nel browser.
+                    </p>
+                  </div>
+
+                  <div className="space-y-1">
+                    <h4 className="font-bold text-slate-900 flex items-center gap-2">
+                      <span className="w-6 h-6 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center text-xs font-bold">2</span>
+                      Piano Editoriale Social & Video
+                    </h4>
+                    <p className="text-xs text-slate-600 pl-8">
+                      Kanban board visiva per tracciare i contenuti da bozza a pubblicato per Instagram, LinkedIn, YouTube, TikTok e Blog.
+                    </p>
+                  </div>
+
+                  <div className="space-y-1">
+                    <h4 className="font-bold text-slate-900 flex items-center gap-2">
+                      <span className="w-6 h-6 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center text-xs font-bold">3</span>
+                      Pomodoro Timer & Scratchpad
+                    </h4>
+                    <p className="text-xs text-slate-600 pl-8">
+                      Timer 25/5 min per entrare in stato di flow con blocco note rapido integrato per annotare idee senza distrazioni.
+                    </p>
+                  </div>
+
+                  <div className="space-y-1">
+                    <h4 className="font-bold text-slate-900 flex items-center gap-2">
+                      <span className="w-6 h-6 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center text-xs font-bold">4</span>
+                      Utility per Content Creator
+                    </h4>
+                    <p className="text-xs text-slate-600 pl-8">
+                      Contatore caratteri con limiti preimpostati, calcolatore di Engagement Rate e generatore di palette colori HEX.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="pt-4 border-t border-slate-200 flex justify-end">
+                  <button
+                    type="button"
+                    onClick={() => setShowGuideModal(false)}
+                    className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs px-6 py-2.5 rounded-xl shadow-md transition cursor-pointer"
+                  >
+                    Ho Capito, Inizia!
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Footer */}
+          <footer className="pt-6 border-t border-slate-200 text-center text-xs text-slate-500">
+            <p>
+              Suite di Pianificazione & Utility per Content Creator • Tutti i dati sono memorizzati in locale (LocalStorage) nel tuo browser.
+            </p>
+          </footer>
+        </div>
+      );
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+</html>
